@@ -78,26 +78,29 @@ class PointCloudTransformNode(Node):
     def pointcloud_callback(self, msg):
         if self.odom_data is None or self.rotation_matrix is None:
             return
+
+        # 读取点云数据（结构化数组）
+        points_struct = np.array(list(pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)))
         
-        # Read point cloud data as a NumPy array and convert to float32
-        points_structured = np.array(list(pc2.read_points(msg, field_names=("x", "y", "z"), skip_nans=True)))
-        
-        # Convert structured array to regular float32 array of shape (n, 3)
-        points = points_structured.view(np.float32).reshape(-1, 3)
-        
-        # Add homogeneous coordinate (1.0) to points
-        points_homogeneous = np.hstack((points, np.ones((points.shape[0], 1))))
-        
-        # Apply transformation using matrix multiplication
-        transformed_points = np.dot(self.rotation_matrix, points_homogeneous.T).T[:, :3]
-        
-        # Create new PointCloud2 message
+        if len(points_struct) == 0:
+            return
+
+        # 从结构化数组中提取x, y, z分量并构建新的float32数组
+        points = np.zeros((len(points_struct), 3), dtype=np.float32)
+        points[:, 0] = points_struct['x']  # 提取x坐标
+        points[:, 1] = points_struct['y']  # 提取y坐标
+        points[:, 2] = points_struct['z']  # 提取z坐标
+
+        # 将点转换为齐次坐标
+        points_homogeneous = np.hstack([points, np.ones((points.shape[0], 1), dtype=np.float32)])
+
+        # 应用变换矩阵
+        transformed_points = (self.rotation_matrix @ points_homogeneous.T).T[:, :3]
+
         header = msg.header
-        header.frame_id = self.get_parameter('frame_id').value  # Simplified parameter fetching
-        transformed_pointcloud = pc2.create_cloud_xyz32(header, transformed_points)
-        
-        # Publish transformed point cloud
-        self.transformed_pointcloud_pub.publish(transformed_pointcloud)
+        header.frame_id = self.get_parameter('frame_id').value
+        cloud_msg = pc2.create_cloud_xyz32(header, transformed_points)
+        self.transformed_pointcloud_pub.publish(cloud_msg)
 
 def main(args=None):
     rclpy.init(args=args)
