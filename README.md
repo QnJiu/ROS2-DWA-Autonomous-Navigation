@@ -32,3 +32,5 @@ ros2 launch nav_slam 2dpoints.launch.py
 ```
 ## 演示视频
 https://www.bilibili.com/video/BV1kzEwzuEFw?spm_id_from=333.788.videopod.sections&vd_source=134c12873ff478ea447a06d652426f8f
+
+联系：clibang2022@163.com
