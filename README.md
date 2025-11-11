@@ -15,6 +15,11 @@ simulate，ros2，gazebo，navigation，slam
 ![image](https://github.com/user-attachments/assets/baac6889-d251-4891-8d21-c47fa4b45a33)
 
 
+# 还包含su7模型的阿克曼底盘
+<img width="2344" height="1400" alt="image" src="https://github.com/user-attachments/assets/9a933d84-e864-4fbf-98d5-312a79838130" />
+
+
+
 ## 安装运行
 
 ```
@@ -22,9 +27,13 @@ git clone https://github.com/Ming2zun/Pure-tracking-slam-automatic-navigation-sy
 ```
 
 ## 运行测试
-###  启动仿真
+###  启动差速仿真
 ```
 ros2 launch gazebo_modele gazebo.launch.py
+```
+###  启动阿克曼su7仿真
+```
+ros2 launch four_wheeled_vehicle vehicle_gazebo_ok.launch.py
 ```
 ###  启动导航
 ```
