@@ -17,7 +17,8 @@ simulate，ros2，gazebo，navigation，slam
 
 # 还包含su7模型的阿克曼底盘
 <img width="2344" height="1400" alt="image" src="https://github.com/user-attachments/assets/9a933d84-e864-4fbf-98d5-312a79838130" />
-
+此模型放在：
+链接: https://pan.baidu.com/s/1geyZbNclzaeNOMe9bcLUvg?pwd=rwqb 提取码: rwqb
 
 
 ## 安装运行
