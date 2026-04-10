@@ -29,7 +29,7 @@ setup(
             'odom_map_tf = nav_slam.odom_map_tf:main',
             'points_pub_map = nav_slam.points_pub_map:main',
             'start_nav = nav_slam.start_nav:main',
-            
+            'eval_oscillation = nav_slam.eval_oscillation:main',       
         ],
     },
 )

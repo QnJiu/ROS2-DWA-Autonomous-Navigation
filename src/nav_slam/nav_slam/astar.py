@@ -26,6 +26,7 @@ from geometry_msgs.msg import PoseStamped
 import math
 from rclpy.qos import QoSProfile
 import scipy.interpolate as si
+from scipy.interpolate import splprep, splev
 import numpy as np
 from nav_msgs.msg import Odometry
 from scipy.interpolate import BSpline
@@ -103,7 +104,39 @@ def astar(start, goal, grid):
                 current = came_from[current]
                 path.append(current)
             path.reverse()
+            
+            
+            # ==========================================================
+            # 🚀 A* 路径 B 样条平滑后处理模块 🚀
+            # 去除相邻的重复点 (极其关键，防止平滑算法报错)
+            clean_path = [path[0]]
+            for p in path[1:]:
+                if p != clean_path[-1]:
+                    clean_path.append(p)
+                    
+            if len(clean_path) > 3:  # B样条至少需要4个独立点
+                path_array = np.array(clean_path)
+                x = path_array[:, 0]
+                y = path_array[:, 1]
+
+                # 计算 B 样条曲线参数 (s为平滑因子，越大越平滑)
+                # 使用 try-except 防止个别极端短路径导致的拟合失败
+                try:
+                    tck, u = splprep([x, y], s=2.0, k=3)
+                    
+                    # 动态采样点数，保证曲线足够细腻
+                    num_samples = max(100, len(clean_path) * 3)
+                    u_fine = np.linspace(0, 1, num_samples)
+                    x_smooth, y_smooth = splev(u_fine, tck)
+
+                    # 将平滑后的坐标重新打包回 [(x1,y1), (x2,y2)...] 的格式
+                    path = [(float(x_smooth[i]), float(y_smooth[i])) for i in range(len(x_smooth))]
+                except Exception as e:
+                    pass # 如果拟合失败，就乖乖用原来没有平滑的 path
+            # ==========================================================
+
             return path
+            
         if current in closed_set:  # 检查节点是否已被访问过
             continue
         closed_set.add(current)  # 标记为已访问
