@@ -1,0 +1,14 @@
+{
+    "python.autoComplete.extraPaths": [
+        "/home/flt/dev_ws/install/nav_slam/lib/python3.10/site-packages",
+        "/home/flt/dev_ws/install/gazebo_modele/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ],
+    "python.analysis.extraPaths": [
+        "/home/flt/dev_ws/install/nav_slam/lib/python3.10/site-packages",
+        "/home/flt/dev_ws/install/gazebo_modele/lib/python3.10/site-packages",
+        "/opt/ros/humble/lib/python3.10/site-packages",
+        "/opt/ros/humble/local/lib/python3.10/dist-packages"
+    ]
+}

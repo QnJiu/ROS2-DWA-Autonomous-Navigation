@@ -16,8 +16,7 @@
 
 
 3. **全局 A* 算法微调：**
-   * 引入B采样插值，提高A*算法的平滑度
-
+   * 引入B采样插值，提高A*算法的平滑度,减少冗余点
 
 ## 🛠️ 环境依赖与运行
 * Ubuntu 22.04 + ROS2 Humble
@@ -32,7 +31,7 @@ ros2 launch nav_slam 2dpoints.launch.py
 ## 安装运行
 
 ```
-git clone https://github.com/Ming2zun/Pure-tracking-slam-automatic-navigation-system.git
+git clone https://github.com/QnJiu/ROS2-DWA-Autonomous-Navigation
 ```
 
 ## 运行测试
