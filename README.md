@@ -1,3 +1,5 @@
+
+
 # ROS2 移动机器人自主导航系统 (Enhanced A* & DWA)
 
 本项目基于 ROS2 (Humble) 和 Gazebo 仿真环境，构建了一个完整的移动机器人建图与导航框架。在原开源项目的基础上，针对原有的 APF（人工势场法）容易陷入局部极小值的问题，**重点重构了局部路径规划算法**，实现了具备运动学约束的 **DWA（动态窗口法）** 结合 **A* 全局搜索**的混合导航策略。
@@ -19,6 +21,9 @@
    * 引入B采样插值，提高A*算法的平滑度,减少冗余点
 
 4. **针对移动障碍物引入卡尔曼预测通过预测轨迹进行避障：**
+<img width="1191" height="631" alt="1776100889352" src="https://github.com/user-attachments/assets/3a7c4e5f-c40c-4a35-808c-fc94752066e1" />
+<img width="1194" height="582" alt="1776100913709" src="https://github.com/user-attachments/assets/80d9e6f7-a812-4d0f-9e72-8913d55b4355" />
+
 
 ## 🛠️ 环境依赖与运行
 * Ubuntu 22.04 + ROS2 Humble
