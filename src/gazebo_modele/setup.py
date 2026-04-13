@@ -16,6 +16,7 @@ setup(
         (os.path.join('share', package_name, 'launch'), glob('launch/*.launch.py')),
         (os.path.join('share', package_name, 'urdf'), glob('urdf/**')),
         (os.path.join('share', package_name, 'world'), glob('world/**')),
+        (os.path.join('share', package_name, 'models'), glob('models/*.sdf')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

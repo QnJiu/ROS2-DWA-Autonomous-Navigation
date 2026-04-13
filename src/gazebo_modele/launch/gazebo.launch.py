@@ -39,6 +39,9 @@ def generate_launch_description():
     urdf_model_path = os.path.join(pkg_share, f'urdf/{urdf_name}')
     
     gazebo_world_path = os.path.join(pkg_share, 'world/3d.world')
+    obstacle_model_path = os.path.join(pkg_share, 'models/obstacle_cylinder.sdf')
+    
+
 
 
     start_gazebo_cmd = ExecuteProcess(
@@ -50,6 +53,12 @@ def generate_launch_description():
         package='gazebo_ros', 
         executable='spawn_entity.py',
         arguments=['-entity', robot_name_in_model,  '-file', urdf_model_path ], output='screen')
+    # Launch the moving obstacle
+    spawn_obstacle_cmd = Node(
+        package='gazebo_ros', 
+        executable='spawn_entity.py',
+        arguments=['-entity', 'moving_obstacle', '-file', obstacle_model_path, '-x', '2.0', '-y', '0.0', '-z', '0.5'], 
+        output='screen')
 	
     # Start Robot State publisher
     start_robot_state_publisher_cmd = Node(
@@ -84,6 +93,7 @@ def generate_launch_description():
 
     ld.add_action(start_gazebo_cmd)
     ld.add_action(spawn_entity_cmd)
+    ld.add_action(spawn_obstacle_cmd)
     ld.add_action(start_robot_state_publisher_cmd)
     ld.add_action(joint_state_publisher_node)
 

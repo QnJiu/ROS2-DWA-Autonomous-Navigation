@@ -9,41 +9,60 @@ import numpy as np
 from nav_msgs.msg import Path
 import random
 
+# ================= 卡尔曼滤波器类 =================
+class SimpleKalmanFilter:
+    def __init__(self, dt):
+        self.dt = dt
+        self.X = np.zeros(4) # [x, y, vx, vy]
+        self.F = np.array([[1, 0, dt, 0],
+                           [0, 1, 0, dt],
+                           [0, 0, 1, 0],
+                           [0, 0, 0, 1]])
+        self.H = np.array([[1, 0, 0, 0],
+                           [0, 1, 0, 0]])
+        self.P = np.eye(4) * 10.0
+        self.Q = np.eye(4) * 0.01
+        self.R = np.eye(2) * 0.1
+        self.is_initialized = False
+
+    def update(self, z):
+        if not self.is_initialized:
+            self.X = np.array([z[0], z[1], 0.0, 0.0])
+            self.is_initialized = True
+            return self.X
+        X_pred = self.F @ self.X
+        P_pred = self.F @ self.P @ self.F.T + self.Q
+        y = z - (self.H @ X_pred)
+        S = self.H @ P_pred @ self.H.T + self.R
+        K = P_pred @ self.H.T @ np.linalg.inv(S)
+        self.X = X_pred + K @ y
+        self.P = (np.eye(4) - K @ self.H) @ P_pred
+        return self.X
+# ========================================================
+
 class DWAController:
     def __init__(self):
-        # 1. 机器人运动学极限
         self.v_max = 0.8       
         self.v_min = -0.2      
         self.w_max = 0.8       
         self.w_min = -0.8      
-        
-        # 加速度限制
         self.v_acc = 1.0       
         self.w_acc = 1.5       
-        
-        # 采样分辨率
         self.v_res = 0.05      
         self.w_res = 0.05      
-
-        # 2. 仿真推演参数
         self.dt = 0.1          
         self.predict_time = 1.0 
         self.safe_radius = 0.20 
         self.startup_safe_radius = 0.15
         self.startup_flag = True  
-
-        # 3. 评价函数权重 (归一化后的权重比例)
-        self.alpha = 0.5  # 朝向权重
-        self.beta = 0.4   # 避障权重
-        self.gamma = 0.8  # 速度权重
-
-        # 4. 死锁检测状态变量
+        self.alpha = 0.5  
+        self.beta = 0.4   
+        self.gamma = 0.8  
         self.deadlock_count = 0
         self.deadlock_threshold = 20  
-    
+        self.predicted_dynamic_obs = []
 
-    def calculate_best_velocity(self, pose, v_c, w_c, target, obstacles):
-        # 动态窗口计算
+    def calculate_best_velocity(self, pose, v_c, w_c, target, obstacles, predicted_obs, dynamic_safe_radius):
         Vs = [self.v_min, self.v_max, self.w_min, self.w_max]
         Vd = [v_c - self.v_acc * self.dt, v_c + self.v_acc * self.dt,
               w_c - self.w_acc * self.dt, w_c + self.w_acc * self.dt]
@@ -53,36 +72,27 @@ class DWAController:
         w_min_win = max(Vs[2], Vd[2])
         w_max_win = min(Vs[3], Vd[3])
 
-                # ==========================================================
-        # 【平滑限速修复版】解决“刚开始慢，突然猛加速”的问题
+        # 平滑限速
         dx = target[0] - pose[0]
         dy = target[1] - pose[1]
         target_angle = math.atan2(dy, dx)
-        # 计算目标点相对车头的角度差（0~3.14弧度）
         angle_diff = abs(math.atan2(math.sin(target_angle - pose[2]), math.cos(target_angle - pose[2])))
         
-        # 只要角度差大于 30度（0.5弧度），就开始施加平滑限速
         if angle_diff > 0.5:
-            # 将角度差归一化到 0~1 之间 (0.5弧度对应0，3.14弧度对应1)
             ratio = (angle_diff - 0.5) / (math.pi - 0.5)
-            # 根据比例计算限速值：角度越大，限速越低
-            # 角度差180度时(ratio=1)，限速 0.15
-            # 角度差30度时(ratio=0)，限速 0.6
             limit_v = 0.6 - ratio * 0.45
             v_max_win = min(v_max_win, limit_v)
-        # ==========================================================
 
         best_v, best_w = 0.0, 0.0
         max_score = -float('inf')
-        current_safe_radius = self.startup_safe_radius if self.startup_flag else self.safe_radius
+        current_safe_radius = self.startup_safe_radius if self.startup_flag else dynamic_safe_radius
 
-        # 网格化采样
         v = v_min_win
         while v <= v_max_win + 0.001:
             w = w_min_win
             while w <= w_max_win + 0.001:
                 traj = self.predict_trajectory(pose, v, w)
-                score = self.evaluate_trajectory(traj, target, obstacles, v, current_safe_radius)
+                score = self.evaluate_trajectory(traj, target, obstacles, v, current_safe_radius, predicted_obs)
                 if score > max_score:
                     max_score = score
                     best_v = v
@@ -90,7 +100,6 @@ class DWAController:
                 w += self.w_res
             v += self.v_res
 
-        # 死锁检测逻辑
         if abs(best_v) < 0.05 and abs(best_w) > 0.6:
             self.deadlock_count += 1
         else:
@@ -103,7 +112,6 @@ class DWAController:
         
         if best_v > 0.1:
             self.startup_flag = False
-
         return best_v, best_w
 
     def predict_trajectory(self, pose, v, w):
@@ -118,17 +126,17 @@ class DWAController:
             time += self.dt
         return traj
 
-    def evaluate_trajectory(self, traj, target, obstacles, v, safe_radius):
+    def evaluate_trajectory(self, traj, target, obstacles, v, safe_radius, predicted_obs):
         end_pose = traj[-1]
         
-        # 1. 朝向评价 (归一化，修复角度跳变)
+        # 1. 朝向评价
         dx = target[0] - end_pose[0]
         dy = target[1] - end_pose[1]
         target_angle = math.atan2(dy, dx)
         angle_diff = math.atan2(math.sin(target_angle - end_pose[2]), math.cos(target_angle - end_pose[2]))
         heading_score = (math.pi - abs(angle_diff)) / math.pi  
 
-        # 2. 避障评价 (去掉截断，恢复区分度)
+        # 2. 静态真实避障评价 (硬约束保命)
         min_dist = float('inf')
         for p in traj[::2]: 
             for obs in obstacles:
@@ -139,14 +147,30 @@ class DWAController:
             return -float('inf') 
         dist_score = min(min_dist / 2.0, 1.0)
 
-        # 3. 速度评价 (归一化)
+        # 3. 动态预测避障评价 (软约束排斥 + 时间碰撞死刑)
+        dynamic_penalty = 0.0
+        if len(predicted_obs) > 0:
+            min_future_dist = float('inf')
+            for p in traj[::2]: 
+                for ghost_obs in predicted_obs:
+                    dist = math.hypot(p[0] - ghost_obs[0], p[1] - ghost_obs[1])
+                    if dist < min_future_dist:
+                        min_future_dist = dist
+            
+            # 【关键修复1】只有当小车有速度(>0.05)时才判死刑，允许它原地停车等！
+            if min_future_dist < 0.4 and abs(v) > 0.05:
+                return -float('inf')
+            elif min_future_dist < 2.0:
+                dynamic_penalty = (2.0 - min_future_dist) / 2.0 * 4.0 
+
+        # 4. 速度评价
         vel_score = max(0.0, v) / self.v_max
 
-        total_score = (self.alpha * heading_score + self.beta * dist_score + self.gamma * vel_score)
+        # 【关键修复2】之前漏掉了这两行，导致返回 None 报错小车不动
+        total_score = (self.alpha * heading_score + self.beta * dist_score + self.gamma * vel_score - dynamic_penalty)
         return total_score
 
 
-# ROS 2节点
 class PathFollowingNode(Node):
     def __init__(self):
         super().__init__('path_following_node')
@@ -154,6 +178,8 @@ class PathFollowingNode(Node):
         self.current_v = 0.0
         self.current_w = 0.0
         self.path_points = None
+        self.path_received = False
+        self.kf_tracker = SimpleKalmanFilter(dt=0.1) 
         
         self.odom_subscriber = self.create_subscription(Odometry, '/odom', self.odometry_callback, 10)
         self.cmd_vel_publisher = self.create_publisher(Twist, '/cmd_vel', 10)
@@ -162,15 +188,12 @@ class PathFollowingNode(Node):
         
         self.current_odom = None
         self.latest_scan = None
-        self.path_received = False
-        self.get_logger().info('DWA Node Started (Ultimate Version)!')
+        self.get_logger().info('DWA Node Started (Ultimate Safe Wait Version)!')
 
     def path_callback(self, msg):
-        # 收到空路径才真正停止，防止状态锁死
         if len(msg.poses) == 0:
             self.path_received = False
             return
-
         self.path_points_list = [[point.pose.position.x, point.pose.position.y] for point in msg.poses]
         self.path_points = np.array(self.path_points_list)
         assert self.path_points.ndim == 2, "path_points must be a 2D array"
@@ -202,7 +225,6 @@ class PathFollowingNode(Node):
     def odometry_callback(self, msg):
         self.current_xy = [msg.pose.pose.position.x, msg.pose.pose.position.y]
         
-        # 没有路径时：只发0速度，绝对不 return，保证节点活着
         if not self.path_received or self.path_points is None:
             cmd_vel_msg = Twist()
             cmd_vel_msg.linear.x = 0.0
@@ -214,7 +236,7 @@ class PathFollowingNode(Node):
 
         pose = [msg.pose.pose.position.x, msg.pose.pose.position.y, self.quaternion_to_yaw(msg.pose.pose.orientation)]
         
-        # 点云处理 (带CPU防爆机制)
+        # 点云处理
         real_obstacles = []
         if self.latest_scan is not None:
             yaw = pose[2]
@@ -228,21 +250,79 @@ class PathFollowingNode(Node):
                         global_y = pose[1] + local_x * math.sin(yaw) + local_y * math.cos(yaw)
                         real_obstacles.append([global_x, global_y])
             
-            # 防爆：先砍到300个，再排序取最近60个
             if len(real_obstacles) > 300:
                 real_obstacles = random.sample(real_obstacles, 300)
             if len(real_obstacles) > 60:
                 real_obstacles.sort(key=lambda obs: math.hypot(obs[0]-pose[0], obs[1]-pose[1]))
                 real_obstacles = real_obstacles[:60]
                 
-        # 预瞄点逻辑 (基于偏离距离动态调整，防止起步走丢)
-        lookahead_target = self.path_points[-1] # 默认终点
+        # ================= 基于密度的智能聚类与预测 =================
+        self.dwa_controller.predicted_dynamic_obs = [] 
+        current_dynamic_safe_radius = self.dwa_controller.safe_radius
+        is_dynamic_locked = False 
+
+        if len(real_obstacles) > 0:
+            for pt_candidate in real_obstacles:
+                if is_dynamic_locked:
+                    break 
+                
+                count_neighbors = 0
+                for obs in real_obstacles:
+                    if math.hypot(obs[0] - pt_candidate[0], obs[1] - pt_candidate[1]) < 0.3:
+                        count_neighbors += 1
+                
+                if 3 <= count_neighbors <= 20:
+                    cluster_points = []
+                    for obs in real_obstacles:
+                        if math.hypot(obs[0] - pt_candidate[0], obs[1] - pt_candidate[1]) < 0.4:
+                            cluster_points.append(obs)
+                    
+                    if len(cluster_points) >= 3:
+                        obs_array = np.array(cluster_points)
+                        centroid_x = np.mean(obs_array[:, 0])
+                        centroid_y = np.mean(obs_array[:, 1])
+                        
+                        estimated_state = self.kf_tracker.update(np.array([centroid_x, centroid_y]))
+                        obs_vx = estimated_state[2]
+                        obs_vy = estimated_state[3]
+                        speed_magnitude = math.hypot(obs_vx, obs_vy)
+                        
+                        if speed_magnitude > 0.15:
+                            is_dynamic_locked = True
+                            self.get_logger().info(f'【锁定动态目标】速度: {speed_magnitude:.2f} m/s')
+                            
+                            # 生成幽灵点
+                            predict_time = 1.0 
+                            steps = 3 
+                            for i in range(1, steps + 1):
+                                dt_future = (predict_time / steps) * i
+                                future_x = centroid_x + obs_vx * dt_future
+                                future_y = centroid_y + obs_vy * dt_future
+                                self.dwa_controller.predicted_dynamic_obs.append([future_x, future_y])
+                            
+                            # 动态膨胀安全半径
+                            vec_to_obs_x = centroid_x - pose[0]
+                            vec_to_obs_y = centroid_y - pose[1]
+                            dist_to_obs = math.hypot(vec_to_obs_x, vec_to_obs_y)
+                            
+                            if dist_to_obs > 0.01:
+                                relative_approach_speed = - (obs_vx * (vec_to_obs_x/dist_to_obs) + obs_vy * (vec_to_obs_y/dist_to_obs))
+                                if relative_approach_speed > 0.1: 
+                                    expanded_radius = self.dwa_controller.safe_radius + relative_approach_speed * 0.4
+                                    expanded_radius = min(expanded_radius, 0.6) 
+                                    current_dynamic_safe_radius = expanded_radius
+        else:
+            self.kf_tracker.is_initialized = False
+        # ===============================================================
+        
+        # 预瞄点逻辑
+        lookahead_target = self.path_points[-1]
         distances_to_path = np.linalg.norm(self.path_points - np.array(pose[:2]), axis=1)
         nearest_idx = np.argmin(distances_to_path)
         deviation_dist = distances_to_path[nearest_idx]
         
-        target_lookahead_dist = 1.0  # 正常看 1.0 米
-        if deviation_dist > 1.0:     # 严重偏离看 2.0 米找方向
+        target_lookahead_dist = 1.0
+        if deviation_dist > 1.0:
             target_lookahead_dist = 2.0
             
         temp_dist = 0.0
@@ -252,10 +332,11 @@ class PathFollowingNode(Node):
                 lookahead_target = self.path_points[i+1]
                 break
 
-        # DWA计算
         try:
             speed, steering_angle = self.dwa_controller.calculate_best_velocity(
-                pose, self.current_v, self.current_w, lookahead_target, real_obstacles)
+                pose, self.current_v, self.current_w, lookahead_target, 
+                real_obstacles, self.dwa_controller.predicted_dynamic_obs,
+                current_dynamic_safe_radius)
             self.current_v = speed
             self.current_w = steering_angle
         except Exception as e:
@@ -264,7 +345,6 @@ class PathFollowingNode(Node):
             self.current_v = 0.0
             self.current_w = 0.0
 
-        # 停止条件 (不锁死节点)
         distance_to_end = np.linalg.norm(np.array(pose[:2]) - self.path_points[-1])
         if distance_to_end < 0.2:
             speed = 0.0
@@ -272,7 +352,6 @@ class PathFollowingNode(Node):
             self.current_v = 0.0
             self.current_w = 0.0
             
-        # 发布指令
         cmd_vel_msg = Twist()
         cmd_vel_msg.linear.x = speed
         cmd_vel_msg.angular.z = steering_angle

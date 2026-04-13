@@ -6,7 +6,7 @@
 相比于原始版本，本项目主要完成了以下深度优化：
 
 1. **局部规划器重构 (APF -> DWA)：**
-   * 废弃了原有的纯追踪与人工势场法，从零实现 DWA 算法。
+   * 最先在局部控制中引入人工势场法，但人工势场法在多障碍物中避障能力较差废弃了原有的纯追踪与人工势场法，从零实现 DWA 算法。
    * 引入了小车底盘的物理运动学约束（最大线/角速度、加速度），使得生成的轨迹完全符合实体机器人的物理极限，消除了原地剧烈震荡现象。
    * 自定义了包含 `Heading` (航向)、`Distance` (避障) 和 `Velocity` (速度) 的三维评价函数。
 
@@ -17,6 +17,8 @@
 
 3. **全局 A* 算法微调：**
    * 引入B采样插值，提高A*算法的平滑度,减少冗余点
+
+4. **针对移动障碍物引入卡尔曼预测通过预测轨迹进行避障：**
 
 ## 🛠️ 环境依赖与运行
 * Ubuntu 22.04 + ROS2 Humble
@@ -37,9 +39,7 @@ git clone https://github.com/QnJiu/ROS2-DWA-Autonomous-Navigation
 ## 运行测试
 ###  启动差速仿真
 ros2 launch gazebo_modele gazebo.launch.py
-
 ###  启动导航
-```
 ros2 launch nav_slam 2dpoints.launch.py
 ```
 ## 特别致谢：本项目参考https://github.com/Ming2zun/Pure-tracking-slam-automatic-navigation-system.git对其纯跟踪控制以及A*全局规划进行修改
